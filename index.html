@@ -251,6 +251,83 @@
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://enhcxlirsbkgnhutyeje.supabase.co; worker-src 'self'; manifest-src 'self'; base-uri 'self'; object-src 'none'; form-action 'none'">
+<script src="supabase.js"></script>
+<script>
+/* Konto-Anbindung: Supabase direkt aus dem Browser. Der Schlüssel unten ist der öffentliche Anon-Key;
+   den Datenschutz übernimmt Row Level Security in der Datenbank (jeder sieht nur seine eigenen Vorlagen). */
+(function () {
+  var URL = 'https://enhcxlirsbkgnhutyeje.supabase.co', KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVuaGN4bGlyc2JrZ25odXR5ZWplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NjEwOTcsImV4cCI6MjEwNTMzNzA5N30.uhZBDH7bnNsCK8mpBj78QOj5bSDOWFROZ-pMcxv_14o';
+  var sb = supabase.createClient(URL, KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+  window.__SB = { client: sb, url: URL, key: KEY };
+  async function userId() {
+    var r = await sb.auth.getSession();
+    if (!r.data.session) throw new Error('Nicht angemeldet.');
+    return r.data.session.user.id;
+  }
+  window.OVERLAY_STORE = {
+    async list() {
+      var r = await sb.from('presets').select('id,name,data').order('name', { ascending: true });
+      if (r.error) throw new Error('Vorlagen konnten nicht geladen werden.');
+      return r.data || [];
+    },
+    async save(name, data) {
+      var uid = await userId();
+      var esc = name.replace(/[\\%_]/g, '\\$&');
+      var ex = await sb.from('presets').select('id').ilike('name', esc);
+      if (ex.error) throw new Error('Speichern fehlgeschlagen.');
+      if (ex.data && ex.data.length) {
+        var u = await sb.from('presets').update({ name: name, data: data }).eq('id', ex.data[0].id);
+        if (u.error) throw new Error('Speichern fehlgeschlagen.');
+        return;
+      }
+      var i = await sb.from('presets').insert({ user_id: uid, name: name, data: data });
+      if (i.error) throw new Error(/Maximal 30/.test(i.error.message) ? 'Maximal 30 Vorlagen. Bitte zuerst eine löschen.' : 'Speichern fehlgeschlagen.');
+    },
+    async remove(id) {
+      var r = await sb.from('presets').delete().eq('id', id);
+      if (r.error) throw new Error('Löschen fehlgeschlagen.');
+    },
+    async signOut() { await sb.auth.signOut(); location.reload(); }
+  };
+})();
+</script>
+<style>
+  #authGate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px 16px; overflow-y: auto;
+    background: radial-gradient(900px 500px at 50% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%), var(--bg); }
+  #authGate[hidden] { display: none; }
+  #authGate.checking .gate-card { visibility: hidden; }
+  .gate-card { width: 100%; max-width: 400px; background: var(--surface); border-radius: 24px; padding: 32px 28px 28px;
+    box-shadow: 0 24px 60px -20px rgba(20,22,28,.28), 0 8px 20px -12px rgba(20,22,28,.18); }
+  .gate-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+  .gate-mark { width: 48px; height: 48px; border-radius: 14px; flex: none; display: grid; place-items: center; color: #fff;
+    font-family: var(--display); font-weight: 900; font-size: 24px; letter-spacing: .5px;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent) 45%, color-mix(in srgb, var(--accent) 78%, #000));
+    box-shadow: 0 8px 18px -6px color-mix(in srgb, var(--accent) 65%, transparent), inset 0 1px 0 rgba(255,255,255,.25); }
+  .gate-brand h1 { margin: 0; font-family: var(--display); font-size: 27px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; line-height: 1; }
+  .gate-brand p { margin: 5px 0 0; color: var(--muted); font-size: 13.5px; }
+  .gate-form { display: flex; flex-direction: column; gap: 14px; }
+  .gate-form label span { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .gate-form input:not(.hp) { width: 100%; height: 50px; padding: 0 16px; background: var(--fill); color: var(--text);
+    border: 1.5px solid transparent; border-radius: 14px; font: inherit; font-size: 16px; font-weight: 500; outline: none;
+    transition: background .15s, border-color .15s, box-shadow .15s; }
+  .gate-form input:not(.hp):hover { background: var(--fill-2); }
+  .gate-form input:not(.hp):focus { background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+  .gate-form .hp { position: absolute; left: -9999px; width: 0; height: 0; opacity: 0; }
+  .gate-error { margin: 0; padding: 10px 14px; border-radius: 12px; background: #fdecee; color: #b4111f; font-size: 14px; font-weight: 500; }
+  .gate-error:empty { display: none; }
+  .gate-submit { height: 54px; margin-top: 4px; border: 0; border-radius: 16px; cursor: pointer; color: #fff;
+    font-family: var(--display); font-size: 20px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent));
+    box-shadow: 0 14px 28px -12px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 rgba(255,255,255,.22);
+    transition: transform .08s, filter .15s, opacity .15s; }
+  .gate-submit:hover { filter: brightness(1.05); }
+  .gate-submit:active { transform: scale(.985); }
+  .gate-submit:disabled { opacity: .55; cursor: progress; }
+  .gate-switch { margin: 6px 0 0; text-align: center; color: var(--muted); font-size: 14px; }
+  .gate-switch button { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; }
+  .gate-switch button:hover { text-decoration: underline; }
+</style>
 </head>
 <body>
 <div class="app">
@@ -906,7 +983,8 @@ const SWATCHES = [
 
   /* ---------- Vorlagen ----------
      Mit Konto (window.OVERLAY_API gesetzt): auf dem Server gespeichert, sonst nur in diesem Browser. */
-  const api = window.OVERLAY_API || null;
+  const api = window.OVERLAY_API || null;       // Konto über eigenen Server
+  const store = window.OVERLAY_STORE || null;   // Konto direkt über Supabase (z. B. GitHub Pages)
   const PRESET_KEY = 'score-overlay-presets-v1';
   const presetName = $('presetName'), presetList = $('presetList'), presetMsg = $('presetMsg');
   let presets = [];
@@ -922,13 +1000,19 @@ const SWATCHES = [
     return j;
   }
   async function fetchPresets() {
-    if (api) {
+    if (store) {
+      const rows = await store.list();
+      presets = rows.map(x => Object.assign({ id: x.id, name: x.name }, x.data));
+    } else if (api) {
       const rows = await apiCall('/api/presets');
       presets = rows.map(x => Object.assign({ id: x.id, name: x.name }, x.data));
     } else presets = localRead();
   }
   async function storeSave(pr) {
-    if (api) {
+    if (store) {
+      const data = Object.assign({}, pr); delete data.name; delete data.id;
+      await store.save(pr.name, data);
+    } else if (api) {
       const data = Object.assign({}, pr); delete data.name; delete data.id;
       await apiCall('/api/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: pr.name, data }) });
     } else {
@@ -939,7 +1023,8 @@ const SWATCHES = [
     }
   }
   async function storeDelete(pr) {
-    if (api) await apiCall('/api/presets?id=' + encodeURIComponent(pr.id), { method: 'DELETE' });
+    if (store) await store.remove(pr.id);
+    else if (api) await apiCall('/api/presets?id=' + encodeURIComponent(pr.id), { method: 'DELETE' });
     else localWrite(localRead().filter(p => p.name !== pr.name));
   }
 
@@ -1007,15 +1092,29 @@ const SWATCHES = [
     } catch (e) { say(e.message); }
     renderPresets();
   });
-  if (api) {
+  function showAccount(email, signOut) {
+    document.querySelectorAll('.account').forEach(n => n.remove());
     presetMsg.textContent = 'Speichert Teams, Wettbewerb, Farbe, Format und beide Wappen in deinem Konto – auf allen Geräten verfügbar.';
     const bar = document.createElement('div'); bar.className = 'account';
-    const who = document.createElement('span'); who.textContent = api.email || 'Angemeldet';
-    const form = document.createElement('form'); form.method = 'post'; form.action = '/signout';
-    const out = document.createElement('button'); out.type = 'submit'; out.className = 'btn'; out.textContent = 'Abmelden';
-    form.appendChild(out); bar.append(who, form);
+    const who = document.createElement('span'); who.textContent = email || 'Angemeldet';
+    const out = document.createElement('button'); out.type = 'button'; out.className = 'btn'; out.textContent = 'Abmelden';
+    out.addEventListener('click', signOut);
+    bar.append(who, out);
     document.querySelector('.brand').after(bar);
   }
+  if (api) {
+    showAccount(api.email, async () => {
+      try { await fetch('/signout', { method: 'POST', credentials: 'same-origin' }); } catch (e) {}
+      location.href = '/signin';
+    });
+  }
+  // Wird von der Anmeldung (GitHub-Pages-Version) aufgerufen, sobald jemand angemeldet ist
+  window.OverlayApp = {
+    onSignedIn(email) {
+      showAccount(email, () => store.signOut());
+      if (!store) fetchPresets().then(renderPresets).catch(e => { renderPresets(); say(e.message); });
+    }
+  };
   fetchPresets().then(renderPresets).catch(e => { renderPresets(); say(e.message); });
 
   
@@ -1124,6 +1223,79 @@ const SWATCHES = [
     ]).then(draw, draw);
     document.fonts.ready.then(draw);
   }
+})();
+</script>
+<div id="authGate" class="checking">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <div class="gate-mark" aria-hidden="true">LS</div>
+      <div><h1>Score-Overlay</h1><p id="gateSub">Melde dich an, um deine Vorlagen zu nutzen.</p></div>
+    </div>
+    <form class="gate-form" id="gateForm" novalidate>
+      <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label><span>E-Mail</span><input type="email" id="gateEmail" autocomplete="email" required maxlength="254"></label>
+      <label><span id="gatePwLabel">Passwort</span><input type="password" id="gatePw" autocomplete="current-password" required maxlength="72"></label>
+      <p class="gate-error" id="gateError" role="alert"></p>
+      <button type="submit" class="gate-submit" id="gateSubmit">Anmelden</button>
+      <p class="gate-switch"><span id="gateSwitchText">Noch keinen Account?</span> <button type="button" id="gateSwitch">Registrieren</button></p>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  var S = window.__SB, sb = S.client;
+  var gate = document.getElementById('authGate'), app = document.querySelector('.app');
+  var form = document.getElementById('gateForm'), err = document.getElementById('gateError');
+  var email = document.getElementById('gateEmail'), pw = document.getElementById('gatePw');
+  var submit = document.getElementById('gateSubmit'), mode = 'signin';
+
+  function lock() { gate.hidden = false; gate.classList.remove('checking'); app.inert = true; document.documentElement.style.overflow = 'hidden'; }
+  function unlock(user) { gate.hidden = true; app.inert = false; document.documentElement.style.overflow = ''; window.OverlayApp.onSignedIn(user.email); }
+  function setMode(m) {
+    mode = m; err.textContent = '';
+    var up = m === 'signup';
+    document.getElementById('gateSub').textContent = up ? 'Erstelle ein Konto und speichere deine Vorlagen.' : 'Melde dich an, um deine Vorlagen zu nutzen.';
+    document.getElementById('gatePwLabel').textContent = up ? 'Passwort (mind. 8 Zeichen)' : 'Passwort';
+    pw.autocomplete = up ? 'new-password' : 'current-password';
+    submit.textContent = up ? 'Registrieren' : 'Anmelden';
+    document.getElementById('gateSwitchText').textContent = up ? 'Schon registriert?' : 'Noch keinen Account?';
+    document.getElementById('gateSwitch').textContent = up ? 'Anmelden' : 'Registrieren';
+  }
+  document.getElementById('gateSwitch').addEventListener('click', function () { setMode(mode === 'signin' ? 'signup' : 'signin'); });
+
+  app.inert = true;
+  sb.auth.getSession().then(function (r) { r.data.session ? unlock(r.data.session.user) : lock(); }).catch(lock);
+  sb.auth.onAuthStateChange(function (ev) { if (ev === 'SIGNED_OUT') lock(); });
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    err.textContent = '';
+    var em = email.value.trim().toLowerCase(), pass = pw.value;
+    if (!em || !pass) { err.textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
+    submit.disabled = true;
+    var label = submit.textContent;
+    submit.textContent = mode === 'signup' ? 'Registrieren…' : 'Anmelden…';
+    try {
+      if (mode === 'signup') {
+        var res = await fetch(S.url + '/functions/v1/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: S.key, Authorization: 'Bearer ' + S.key },
+          body: JSON.stringify({ email: em, password: pass, website: form.elements.website.value })
+        });
+        var body = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(body.error || 'Registrierung fehlgeschlagen. Bitte versuche es erneut.');
+      }
+      var r = await sb.auth.signInWithPassword({ email: em, password: pass });
+      if (r.error) throw new Error(mode === 'signup' ? 'Account erstellt, aber die Anmeldung schlug fehl. Bitte melde dich an.' : 'E-Mail oder Passwort falsch.');
+      pw.value = '';
+      unlock(r.data.user);
+    } catch (ex) {
+      err.textContent = ex.message;
+    } finally {
+      submit.disabled = false;
+      submit.textContent = label;
+    }
+  });
 })();
 </script>
 </body>
